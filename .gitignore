@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local secrets. The example file is committed on purpose.
+.env
+.env.*
+!.env.example
+
+.DS_Store
