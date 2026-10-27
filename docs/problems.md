@@ -58,3 +58,7 @@ Fix the fields listed and send the request again.
 ## Internal error
 
 **500.** Something failed on the server. The response carries no internal details; the full error is logged under the same `requestId`.
+
+## Not ready
+
+**503.** Returned by `GET /ready` when the API can't reach its database. The process is running, but it can't serve requests yet. Load balancers and orchestrators should hold traffic back and check again.
