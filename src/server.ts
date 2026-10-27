@@ -1,4 +1,14 @@
-// Placeholder until Phase 2 builds the Express app.
-const port = Number(process.env.PORT ?? 3000);
+import { createApp } from './app.js';
+import { env } from './config/env.js';
+import { logger } from './lib/logger.js';
 
-console.log(`Kursi will listen on port ${port}.`);
+const app = createApp();
+
+app.listen(env.PORT, (error) => {
+  if (error) {
+    logger.fatal({ err: error }, `Could not listen on port ${env.PORT}`);
+    process.exitCode = 1;
+    return;
+  }
+  logger.info(`Kursi is listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+});
