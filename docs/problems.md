@@ -87,6 +87,18 @@ Fix the fields listed and send the request again.
 
 **409.** `PATCH /api/v1/events/{id}` tried to set `capacity` below the number of seats already booked. The `detail` field says how many are booked. The database enforces this rule itself, so it holds even when a booking arrives during the update.
 
+## Event sold out
+
+**409.** Every seat for the event is booked. The `detail` field gives the capacity. A seat may free up if someone cancels.
+
+## Already booked
+
+**409.** You already hold a confirmed seat at this event; each person can hold one. To book again, cancel the existing booking first.
+
+## Event not bookable
+
+**409.** The event exists but isn't taking bookings, because it's cancelled or has already started. The `detail` field says which. Drafts aren't bookable either, but they answer 404 because they aren't public.
+
 ## Internal error
 
 **500.** Something failed on the server. The response carries no internal details; the full error is logged under the same `requestId`.
