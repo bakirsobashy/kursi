@@ -15,6 +15,8 @@ export interface ProblemOptions {
   title?: string;
   /** Specific to this occurrence, safe to show to the caller. */
   detail?: string;
+  /** The underlying error. It is logged, never sent to the caller. */
+  cause?: unknown;
 }
 
 export class AppError extends Error {
@@ -25,9 +27,14 @@ export class AppError extends Error {
 
   constructor(
     status: number,
-    { slug, title, detail }: Required<Pick<ProblemOptions, 'slug' | 'title'>> & ProblemOptions,
+    {
+      slug,
+      title,
+      detail,
+      cause,
+    }: Required<Pick<ProblemOptions, 'slug' | 'title'>> & ProblemOptions,
   ) {
-    super(detail ?? title);
+    super(detail ?? title, { cause });
     this.name = new.target.name;
     this.status = status;
     this.type = problemType(slug);
