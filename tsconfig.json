@@ -1,4 +1,6 @@
 {
+  // Type-checks everything: the app, the tests and the config files.
+  // The build uses tsconfig.build.json, which compiles only src/ into dist/.
   "compilerOptions": {
     "target": "ES2025",
     "module": "NodeNext",
@@ -7,10 +9,9 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
-    "rootDir": "src",
-    "outDir": "dist",
     "sourceMap": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "tests", "*.config.ts"]
 }

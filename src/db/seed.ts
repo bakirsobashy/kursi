@@ -34,10 +34,11 @@ function daysFromNow(days: number, hourUtc: number) {
   return date;
 }
 
-async function seed() {
+/** Inserts the demo rows that are missing and returns how many of each it added. */
+export async function seed() {
   const passwordHash = await argon2.hash(DEMO_PASSWORD, { type: argon2.argon2id });
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const newUsers = await tx
       .insert(users)
       .values([
@@ -137,20 +138,23 @@ async function seed() {
       .onConflictDoNothing()
       .returning({ id: bookings.id });
 
-    logger.info(
-      `Seed added ${newUsers.length} users, ${newEvents.length} events and ${newBookings.length} bookings` +
-        (newUsers.length + newEvents.length + newBookings.length === 0
-          ? ' (all were already there)'
-          : ''),
-    );
+    return { users: newUsers.length, events: newEvents.length, bookings: newBookings.length };
   });
 }
 
-try {
-  await seed();
-} catch (error) {
-  logger.fatal({ err: error }, 'Seeding failed');
-  process.exitCode = 1;
-} finally {
-  await closeDb();
+// Runs only as a script (npm run db:seed), so tests can import seed() without side effects.
+if (import.meta.main) {
+  try {
+    const added = await seed();
+    const total = added.users + added.events + added.bookings;
+    logger.info(
+      `Seed added ${added.users} users, ${added.events} events and ${added.bookings} bookings` +
+        (total === 0 ? ' (all were already there)' : ''),
+    );
+  } catch (error) {
+    logger.fatal({ err: error }, 'Seeding failed');
+    process.exitCode = 1;
+  } finally {
+    await closeDb();
+  }
 }

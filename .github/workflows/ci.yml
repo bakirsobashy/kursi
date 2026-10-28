@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run still going for the old commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      # GitHub's Ubuntu runners include Docker, so Testcontainers starts a real Postgres 18.
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  compose:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The same steps a developer follows on a fresh clone.
+      - run: cp .env.example .env
+      - name: Start Postgres and wait until it is healthy
+        run: docker compose up -d --wait db
+      - run: npm run db:migrate
+      - name: Seed twice (the second run must add nothing)
+        run: |
+          npm run db:seed
+          npm run db:seed 2>&1 | tee seed.log
+          grep -q 'all were already there' seed.log
+      - run: npm run build
+      - name: Start the API
+        run: |
+          NODE_ENV=production node --env-file=.env dist/server.js > api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fs http://localhost:3000/health && exit 0
+            sleep 1
+          done
+          echo "The API did not start"; exit 1
+      - name: /ready returns 200 while the database is up
+        run: curl -fsS http://localhost:3000/ready
+      - name: /ready returns 503 once the database stops
+        run: |
+          docker compose stop db
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ready)
+          echo "GET /ready -> $status"
+          test "$status" = 503
+      - name: /health still answers, so the API survived losing its database
+        run: curl -fsS http://localhost:3000/health
+      - name: API log
+        if: always()
+        run: cat api.log || true
