@@ -155,3 +155,58 @@ jobs:
       - name: API log
         if: always()
         run: cat api.log || true
+
+  docker:
+    name: Docker image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      # Report both architectures, even when one fails.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          # Apple Silicon Macs and ARM servers run this one. GitHub's arm64 runners are free for
+          # public repositories and build natively, without emulation.
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint the Dockerfile
+        if: matrix.arch == 'amd64'
+        run: docker run --rm -i hadolint/hadolint:v2.15.1 < Dockerfile
+      # Third-party actions are pinned to a commit; Dependabot keeps the pins current.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the image, without pushing it
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: kursi:ci
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      # argon2 is the one native module: its prebuilt binary must match the architecture.
+      - name: argon2 works on ${{ matrix.arch }}
+        run: >-
+          docker run --rm kursi:ci node --input-type=module -e
+          "import argon2 from 'argon2'; await argon2.hash('check'); console.log('argon2 works on', process.arch)"
+      - name: The image turns healthy on its own, and stops cleanly
+        run: |
+          # No database needed: /health checks only that the process serves HTTP.
+          docker run --detach --name kursi \
+            -e DATABASE_URL=postgres://kursi:kursi@127.0.0.1:5432/kursi \
+            -e JWT_ACCESS_SECRET=ci-only-secret-that-is-at-least-32-characters \
+            kursi:ci
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' kursi)
+            if [ "$status" = healthy ]; then break; fi
+            sleep 2
+          done
+          echo "Health: $status"
+          test "$status" = healthy
+          docker stop kursi
+          docker logs kursi
+          test "$(docker inspect --format '{{.State.ExitCode}}' kursi)" = 0
+      - name: Image size
+        run: docker image ls kursi:ci --format 'kursi:ci on ${{ matrix.arch }} is {{.Size}}' | tee -a "$GITHUB_STEP_SUMMARY"
