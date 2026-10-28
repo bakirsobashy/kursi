@@ -36,9 +36,7 @@ function limiter(limit: number, options: Partial<Options> = {}) {
     // The limiter has already set Retry-After by the time this runs.
     handler: (_req, res, next) => {
       next(
-        new AppError(429, {
-          slug: 'too-many-requests',
-          title: 'Too many requests',
+        new AppError('too-many-requests', {
           detail: `Too many requests from your address. Try again in ${String(res.getHeader('Retry-After'))} seconds.`,
         }),
       );

@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from 'express';
 import { errors } from 'jose';
-import { AppError, ForbiddenError, UnauthorizedError } from '../lib/errors.js';
+import { AppError } from '../lib/errors.js';
 import { verifyAccessToken, type AuthUser } from '../lib/tokens.js';
 import type { userRole } from '../db/schema.js';
 
@@ -14,7 +14,7 @@ const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/;
 export const authenticate: RequestHandler = async (req, res, next) => {
   const match = BEARER.exec(req.get('authorization') ?? '');
   if (!match) {
-    throw new UnauthorizedError({
+    throw new AppError('unauthorized', {
       detail: 'Send an access token in an Authorization: Bearer <token> header.',
     });
   }
@@ -30,7 +30,7 @@ export const authenticate: RequestHandler = async (req, res, next) => {
       'WWW-Authenticate',
       `Bearer realm="kursi", error="invalid_token", error_description="${detail}"`,
     );
-    throw new AppError(401, { slug: 'invalid-token', title: 'Invalid access token', detail });
+    throw new AppError('invalid-token', { detail });
   }
 
   next();
@@ -48,7 +48,7 @@ export const authenticateIfPresent: RequestHandler = async (req, res, next) => {
 
 /** The authenticated user. Use it in handlers behind `authenticate`. */
 export function currentUser(req: Request): AuthUser {
-  if (!req.user) throw new UnauthorizedError();
+  if (!req.user) throw new AppError('unauthorized');
   return req.user;
 }
 
@@ -57,7 +57,7 @@ export const requireRole =
   (role: (typeof userRole.enumValues)[number]): RequestHandler =>
   (req, _res, next) => {
     if (currentUser(req).role !== role) {
-      throw new ForbiddenError({ detail: `This needs the ${role} role.` });
+      throw new AppError('forbidden', { detail: `This needs the ${role} role.` });
     }
     next();
   };

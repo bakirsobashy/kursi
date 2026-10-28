@@ -69,6 +69,17 @@ jobs:
           echo "The API did not start"; exit 1
       - name: /ready returns 200 while the database is up
         run: curl -fsS http://localhost:3000/ready
+      - name: The built app serves the docs, and their demo login works
+        run: |
+          curl -fsS http://localhost:3000/openapi.json -o openapi.json
+          jq -e '.openapi == "3.1.0"' openapi.json
+          curl -fsS http://localhost:3000/docs | grep -q '/docs/swagger-ui-bundle.js'
+          for file in init.js swagger-ui-bundle.js swagger-ui.css; do
+            curl -fsS -o /dev/null "http://localhost:3000/docs/$file"
+          done
+          jq -c '.paths["/api/v1/auth/login"].post.requestBody.content["application/json"].examples.alice.value' openapi.json |
+            curl -fsS -H 'Content-Type: application/json' --data-binary @- http://localhost:3000/api/v1/auth/login |
+            jq -e '.accessToken | length > 0'
       - name: /ready returns 503 once the database stops
         run: |
           docker compose stop db

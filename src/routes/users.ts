@@ -11,11 +11,7 @@ usersRouter.get('/me', authenticate, async (req, res) => {
   const user = await findUserById(currentUser(req).id);
   // A token outlives its account by up to 15 minutes; after a deletion, it stops working here.
   if (!user) {
-    throw new AppError(401, {
-      slug: 'invalid-token',
-      title: 'Invalid access token',
-      detail: 'The account for this token no longer exists.',
-    });
+    throw new AppError('invalid-token', { detail: 'The account for this token no longer exists.' });
   }
   res.json(toUserResponse(user));
 });

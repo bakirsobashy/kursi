@@ -2,18 +2,8 @@ import { STATUS_CODES } from 'node:http';
 import type { ErrorRequestHandler, Request } from 'express';
 import { ZodError } from 'zod';
 import { databaseProblem } from '../db/errors.js';
-import { AppError, problemType } from '../lib/errors.js';
-
-/** The RFC 9457 Problem Details body every error response uses. */
-export interface Problem {
-  type: string;
-  title: string;
-  status: number;
-  detail?: string;
-  instance: string;
-  requestId: string;
-  errors?: { path: string; message: string }[];
-}
+import { PROBLEMS, problemType, AppError, type ProblemSlug } from '../lib/errors.js';
+import type { Problem } from '../schemas/problem.js';
 
 /** Errors from Express's own body parser carry these fields (the http-errors convention). */
 interface HttpError {
@@ -28,56 +18,41 @@ const isHttpError = (error: unknown): error is HttpError =>
   typeof (error as HttpError).status === 'number' &&
   (error as HttpError).expose === true;
 
+/** The `errors` of a validation-failed problem: each invalid field, and what is wrong with it. */
+export const fieldErrors = (error: ZodError) =>
+  error.issues.map((issue) => ({
+    path: issue.path.map(String).join('.') || '(root)',
+    message: issue.message,
+  }));
+
 function toProblem(error: unknown, req: Request): Problem {
   // The path only, as in RFC 9457's examples; the full URL stays in the request log.
   const instance = req.originalUrl.split('?', 1).at(0) ?? '/';
   const requestId = String(req.id);
+  const problem = (slug: ProblemSlug, detail?: string) => ({
+    type: problemType(slug),
+    title: PROBLEMS[slug].title,
+    status: PROBLEMS[slug].status,
+    ...(detail !== undefined && { detail }),
+    instance,
+    requestId,
+  });
 
   if (error instanceof ZodError) {
     return {
-      type: problemType('validation-failed'),
-      title: 'Your request has invalid fields',
-      status: 400,
-      detail: 'See errors for each field that failed validation.',
-      instance,
-      requestId,
-      errors: error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.') || '(root)',
-        message: issue.message,
-      })),
+      ...problem('validation-failed', 'See errors for each field that failed validation.'),
+      errors: fieldErrors(error),
     };
   }
 
-  if (error instanceof AppError) {
-    return {
-      type: error.type,
-      title: error.title,
-      status: error.status,
-      ...(error.detail !== undefined && { detail: error.detail }),
-      instance,
-      requestId,
-    };
-  }
+  if (error instanceof AppError) return problem(error.slug, error.detail);
 
   if (isHttpError(error) && error.type === 'entity.parse.failed') {
-    return {
-      type: problemType('malformed-json'),
-      title: 'The request body is not valid JSON',
-      status: 400,
-      instance,
-      requestId,
-    };
+    return problem('malformed-json');
   }
 
   if (isHttpError(error) && error.type === 'entity.too.large') {
-    return {
-      type: problemType('payload-too-large'),
-      title: 'The request body is too large',
-      status: 413,
-      detail: 'Request bodies are limited to 100 kB.',
-      instance,
-      requestId,
-    };
+    return problem('payload-too-large', 'Request bodies are limited to 100 kB.');
   }
 
   // Any other client error from Express itself, such as an unsupported charset.
@@ -91,14 +66,10 @@ function toProblem(error: unknown, req: Request): Problem {
     };
   }
 
-  return {
-    type: problemType('internal-error'),
-    title: 'Internal server error',
-    status: 500,
-    detail: 'Something went wrong on our side. Quote the request ID if you report it.',
-    instance,
-    requestId,
-  };
+  return problem(
+    'internal-error',
+    'Something went wrong on our side. Quote the request ID if you report it.',
+  );
 }
 
 /** The last middleware: every thrown or forwarded error ends here. */

@@ -7,11 +7,19 @@ import { createApp } from '../src/app.js';
 import { db, pool } from '../src/db/client.js';
 import { bookings, events, users, type Event, type User } from '../src/db/schema.js';
 import { signAccessToken } from '../src/lib/tokens.js';
+import { withContractCheck } from './contract.js';
 
 const app = createApp();
 
-/** Sends a request to the real app, without opening a port: `await api().get('/health')`. */
-export const api = () => request(app);
+/**
+ * Sends a request to the real app, without opening a port: `await api().get('/health')`.
+ * Every response is checked against the API docs; a mismatch fails the test.
+ */
+export const api = () => request(withContractCheck(app));
+
+/** Like `api`, for an app built with other options. */
+export const apiFor = (customApp: ReturnType<typeof createApp>) =>
+  request(withContractCheck(customApp));
 
 /** Empties every table. Call it in beforeEach so each test starts from nothing. */
 export async function resetDb() {

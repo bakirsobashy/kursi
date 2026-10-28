@@ -2,11 +2,11 @@ import { env } from '../config/env.js';
 import { db } from '../db/client.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { users } from '../db/schema.js';
-import { AppError, ConflictError } from '../lib/errors.js';
+import { AppError } from '../lib/errors.js';
 import { hashPassword, verifyAgainstDummy, verifyPassword } from '../lib/passwords.js';
 import type { Logger } from 'pino';
 import { signAccessToken, type AuthUser } from '../lib/tokens.js';
-import type { LoginBody, RegisterBody } from '../schemas/auth.js';
+import type { LoginBody, RegisterBody, TokenResponse } from '../schemas/auth.js';
 import { issueRefreshToken, revokeSessionOf, rotateRefreshToken } from './refresh-tokens.js';
 import { findUserByEmail, toUserResponse } from './users.js';
 
@@ -19,9 +19,7 @@ export async function register({ email, password, name }: RegisterBody) {
   } catch (error) {
     // The unique index decides, so two sign-ups racing for one email can't both succeed.
     if (isUniqueViolation(error, 'users_email_unique')) {
-      throw new ConflictError({
-        slug: 'email-taken',
-        title: 'Email already registered',
+      throw new AppError('email-taken', {
         detail: 'An account with this email already exists. Log in instead.',
       });
     }
@@ -29,17 +27,13 @@ export async function register({ email, password, name }: RegisterBody) {
   }
 }
 
-const invalidCredentials = () =>
-  new AppError(401, {
-    slug: 'invalid-credentials',
-    title: 'Invalid email or password',
-  });
+const invalidCredentials = () => new AppError('invalid-credentials');
 
 /** The JSON body that login and refresh both return. */
-async function accessTokenBody(user: AuthUser) {
+async function accessTokenBody(user: AuthUser): Promise<TokenResponse> {
   return {
     accessToken: await signAccessToken(user),
-    tokenType: 'Bearer' as const,
+    tokenType: 'Bearer',
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
   };
 }
@@ -62,8 +56,7 @@ export async function login({ email, password }: LoginBody) {
   };
 }
 
-const invalidRefreshToken = (detail: string) =>
-  new AppError(401, { slug: 'invalid-refresh-token', title: 'Invalid refresh token', detail });
+const invalidRefreshToken = (detail: string) => new AppError('invalid-refresh-token', { detail });
 
 /**
  * Trades a refresh token for a new access token and the next refresh token.

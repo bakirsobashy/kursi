@@ -2,12 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import {
-  ConflictError,
-  ForbiddenError,
-  NotFoundError,
-  UnauthorizedError,
-} from '../src/lib/errors.js';
+import { AppError } from '../src/lib/errors.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { notFound } from '../src/middleware/not-found.js';
 import { requestLogger } from '../src/middleware/request-logger.js';
@@ -22,20 +17,16 @@ app.post('/validate', (req, res) => {
   res.status(201).json(body);
 });
 app.get('/sold-out', () => {
-  throw new ConflictError({
-    slug: 'event-sold-out',
-    title: 'Event is sold out',
-    detail: 'All 120 seats for this event are booked.',
-  });
+  throw new AppError('event-sold-out', { detail: 'All 120 seats for this event are booked.' });
 });
 app.get('/unauthorized', () => {
-  throw new UnauthorizedError();
+  throw new AppError('unauthorized');
 });
 app.get('/forbidden', () => {
-  throw new ForbiddenError();
+  throw new AppError('forbidden');
 });
 app.get('/missing', () => {
-  throw new NotFoundError({ detail: 'No event has this ID.' });
+  throw new AppError('not-found', { detail: 'No event has this ID.' });
 });
 app.get('/boom', () => {
   throw new Error('database password is hunter2');

@@ -12,7 +12,7 @@ import { REDACTED_PATHS } from '../src/lib/logger.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { PRODUCTION_RATE_LIMITS } from '../src/middleware/rate-limits.js';
 import { requestLogger } from '../src/middleware/request-logger.js';
-import { api, createEvent, createUser, resetDb, TEST_PASSWORD } from './helpers.js';
+import { api, apiFor, createEvent, createUser, resetDb, TEST_PASSWORD } from './helpers.js';
 
 beforeEach(async () => {
   await resetDb();
@@ -70,7 +70,7 @@ describe('CORS', () => {
 
 describe('rate limits (the production values)', () => {
   // A fresh app per test: each one has its own counters.
-  const strictApi = () => request(createApp({ rateLimits: PRODUCTION_RATE_LIMITS }));
+  const strictApi = () => apiFor(createApp({ rateLimits: PRODUCTION_RATE_LIMITS }));
 
   it('returns 429 with Retry-After after 5 failed logins in a minute', async () => {
     const app = strictApi();
@@ -142,13 +142,17 @@ describe('rate limits (the production values)', () => {
     expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
   });
 
-  it('never limits the health checks', async () => {
-    const app = createApp({ rateLimits: { ...PRODUCTION_RATE_LIMITS, api: 2 } });
+  it('never limits the health checks or the docs', async () => {
+    const app = apiFor(createApp({ rateLimits: { ...PRODUCTION_RATE_LIMITS, api: 2 } }));
 
-    for (let i = 0; i < 5; i++) expect((await request(app).get('/health')).status).toBe(200);
-    expect((await request(app).get('/api/v1/events')).status).toBe(200);
-    expect((await request(app).get('/api/v1/events')).status).toBe(200);
-    expect((await request(app).get('/api/v1/events')).status).toBe(429);
+    for (let i = 0; i < 5; i++) {
+      expect((await app.get('/health')).status).toBe(200);
+      expect((await app.get('/openapi.json')).status).toBe(200);
+      expect((await app.get('/docs')).status).toBe(200);
+    }
+    expect((await app.get('/api/v1/events')).status).toBe(200);
+    expect((await app.get('/api/v1/events')).status).toBe(200);
+    expect((await app.get('/api/v1/events')).status).toBe(429);
   });
 });
 

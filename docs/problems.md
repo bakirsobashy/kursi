@@ -1,6 +1,6 @@
 # Problem types
 
-Every error response from the API is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details object with the content type `application/problem+json`. Its `type` field links to one of the headings below.
+Every error response from the API is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details object with the content type `application/problem+json`. Its `type` field links to one of the headings below. The API docs at `/docs` list, for each route, which of them it can return.
 
 ```json
 {

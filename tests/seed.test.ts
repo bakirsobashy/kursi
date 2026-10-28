@@ -3,7 +3,8 @@ import { eq, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../src/db/client.js';
 import { events, users } from '../src/db/schema.js';
-import { DEMO_PASSWORD, seed } from '../src/db/seed.js';
+import { DEMO_PASSWORD } from '../src/db/demo.js';
+import { seed } from '../src/db/seed.js';
 import { resetDb } from './helpers.js';
 
 describe('seed', () => {

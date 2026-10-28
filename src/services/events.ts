@@ -2,18 +2,21 @@ import { and, asc, eq, gt, gte, ilike, lte, ne, type SQL } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { pgErrorOf } from '../db/errors.js';
 import { bookings, events, users, type Event } from '../db/schema.js';
-import { ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { AppError } from '../lib/errors.js';
 import type { AuthUser } from '../lib/tokens.js';
 import {
   eventTimes,
+  type AttendeeListResponse,
   type CreateEventBody,
+  type EventListResponse,
+  type EventResponse,
   type ListEventsQuery,
   type Pagination,
   type UpdateEventBody,
 } from '../schemas/events.js';
 
-/** The only shape of an event the API sends. */
-export function toEventResponse(event: Event) {
+/** The only shape of an event the API sends, typed by its documented schema. */
+export function toEventResponse(event: Event): EventResponse {
   return {
     id: event.id,
     organizerId: event.organizerId,
@@ -30,9 +33,7 @@ export function toEventResponse(event: Event) {
   };
 }
 
-export type EventResponse = ReturnType<typeof toEventResponse>;
-
-const eventNotFound = () => new NotFoundError({ detail: 'No event has this ID.' });
+const eventNotFound = () => new AppError('not-found', { detail: 'No event has this ID.' });
 
 const canManage = (event: Event, user: AuthUser | undefined) =>
   user !== undefined && (user.role === 'admin' || event.organizerId === user.id);
@@ -44,7 +45,9 @@ const canManage = (event: Event, user: AuthUser | undefined) =>
 export function assertCanManage(event: Event, user: AuthUser) {
   if (canManage(event, user)) return;
   if (event.status === 'draft') throw eventNotFound();
-  throw new ForbiddenError({ detail: 'Only the organizer or an admin can manage this event.' });
+  throw new AppError('forbidden', {
+    detail: 'Only the organizer or an admin can manage this event.',
+  });
 }
 
 async function findEvent(id: string) {
@@ -60,8 +63,7 @@ async function findEventToManage(id: string, user: AuthUser) {
   return event;
 }
 
-const cancelledConflict = (detail: string) =>
-  new ConflictError({ slug: 'event-cancelled', title: 'Event is cancelled', detail });
+const cancelledConflict = (detail: string) => new AppError('event-cancelled', { detail });
 
 export async function createEvent(input: CreateEventBody, organizer: AuthUser) {
   // The organizer and the starting state come from the server, never from the request body.
@@ -97,9 +99,7 @@ export async function updateEvent(id: string, patch: UpdateEventBody, user: Auth
   } catch (error) {
     // The CHECK constraint decides, so a booking that lands mid-update can't slip past it.
     if (pgErrorOf(error)?.constraint === 'events_seats_within_capacity') {
-      throw new ConflictError({
-        slug: 'capacity-below-bookings',
-        title: 'Capacity is below the seats already booked',
+      throw new AppError('capacity-below-bookings', {
         detail: `${event.seatsBooked} seats are already booked, so capacity can't go below that.`,
       });
     }
@@ -111,9 +111,7 @@ export async function updateEvent(id: string, patch: UpdateEventBody, user: Auth
 export async function publishEvent(id: string, user: AuthUser) {
   const event = await findEventToManage(id, user);
   if (event.startsAt <= new Date()) {
-    throw new ConflictError({
-      slug: 'event-started',
-      title: 'Event has already started',
+    throw new AppError('event-started', {
       detail: 'Change the start time to the future before publishing.',
     });
   }
@@ -124,11 +122,7 @@ export async function publishEvent(id: string, user: AuthUser) {
     .where(and(eq(events.id, id), eq(events.status, 'draft')))
     .returning();
   if (!published) {
-    throw new ConflictError({
-      slug: 'event-not-draft',
-      title: 'Only a draft can be published',
-      detail: `This event is ${event.status}.`,
-    });
+    throw new AppError('event-not-draft', { detail: `This event is ${event.status}.` });
   }
   return toEventResponse(published);
 }
@@ -162,7 +156,13 @@ export async function cancelEvent(id: string, user: AuthUser) {
 const escapeLike = (text: string) => text.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 /** Published events that haven't started yet, soonest first. */
-export async function listEvents({ page, limit, from, to, q }: ListEventsQuery) {
+export async function listEvents({
+  page,
+  limit,
+  from,
+  to,
+  q,
+}: ListEventsQuery): Promise<EventListResponse> {
   const now = new Date();
   const conditions: (SQL | undefined)[] = [
     eq(events.status, 'published'),
@@ -188,7 +188,11 @@ export async function listEvents({ page, limit, from, to, q }: ListEventsQuery) 
 }
 
 /** The confirmed bookings of an event, for its organizer or an admin. */
-export async function listAttendees(id: string, user: AuthUser, { page, limit }: Pagination) {
+export async function listAttendees(
+  id: string,
+  user: AuthUser,
+  { page, limit }: Pagination,
+): Promise<AttendeeListResponse> {
   await findEventToManage(id, user);
   const where = and(eq(bookings.eventId, id), eq(bookings.status, 'confirmed'));
 

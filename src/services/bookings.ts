@@ -2,14 +2,15 @@ import { and, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { bookings, events, type Booking, type Event } from '../db/schema.js';
-import { ConflictError, NotFoundError } from '../lib/errors.js';
+import { AppError } from '../lib/errors.js';
 import type { AuthUser } from '../lib/tokens.js';
+import type { BookingListResponse, BookingResponse } from '../schemas/bookings.js';
 import type { Pagination } from '../schemas/events.js';
 
 type EventSummary = Pick<Event, 'id' | 'title' | 'venue' | 'startsAt' | 'endsAt' | 'status'>;
 
 /** The only shape of a booking the API sends, with the event it is for. */
-export function toBookingResponse(booking: Booking, event: EventSummary) {
+export function toBookingResponse(booking: Booking, event: EventSummary): BookingResponse {
   return {
     id: booking.id,
     status: booking.status,
@@ -26,24 +27,15 @@ export function toBookingResponse(booking: Booking, event: EventSummary) {
   };
 }
 
-const eventNotFound = () => new NotFoundError({ detail: 'No event has this ID.' });
+const eventNotFound = () => new AppError('not-found', { detail: 'No event has this ID.' });
 
-const notBookable = (detail: string) =>
-  new ConflictError({ slug: 'event-not-bookable', title: "Event can't be booked", detail });
+const notBookable = (detail: string) => new AppError('event-not-bookable', { detail });
 
 const soldOut = (capacity: number) =>
-  new ConflictError({
-    slug: 'event-sold-out',
-    title: 'Event is sold out',
-    detail: `All ${capacity} seats for this event are booked.`,
-  });
+  new AppError('event-sold-out', { detail: `All ${capacity} seats for this event are booked.` });
 
 const alreadyBooked = () =>
-  new ConflictError({
-    slug: 'already-booked',
-    title: 'Already booked',
-    detail: 'You already have a seat at this event.',
-  });
+  new AppError('already-booked', { detail: 'You already have a seat at this event.' });
 
 /**
  * Books one seat, safely under any number of simultaneous requests.
@@ -112,7 +104,8 @@ async function whyNotBookable(eventId: string, user: AuthUser) {
   return held > 0 ? alreadyBooked() : soldOut(event.capacity);
 }
 
-const bookingNotFound = () => new NotFoundError({ detail: 'You have no booking with this ID.' });
+const bookingNotFound = () =>
+  new AppError('not-found', { detail: 'You have no booking with this ID.' });
 
 /**
  * Cancels the caller's booking and frees its seat, in one transaction, before the event starts.
@@ -131,9 +124,7 @@ export async function cancelBooking(bookingId: string, user: AuthUser) {
     if (!found || found.userId !== user.id) throw bookingNotFound();
 
     const alreadyCancelled = () =>
-      new ConflictError({
-        slug: 'booking-cancelled',
-        title: 'Booking is already cancelled',
+      new AppError('booking-cancelled', {
         detail: 'This booking was cancelled earlier, so its seat is already free.',
       });
     if (found.status === 'cancelled') throw alreadyCancelled();
@@ -144,9 +135,7 @@ export async function cancelBooking(bookingId: string, user: AuthUser) {
       .where(eq(events.id, found.eventId))
       .for('update');
     if (event!.startsAt <= new Date()) {
-      throw new ConflictError({
-        slug: 'event-started',
-        title: 'Event has already started',
+      throw new AppError('event-started', {
         detail: "A booking can't be cancelled once its event has started.",
       });
     }
@@ -169,7 +158,10 @@ export async function cancelBooking(bookingId: string, user: AuthUser) {
 }
 
 /** The caller's bookings, confirmed and cancelled, newest first, each with its event. */
-export async function listMyBookings(user: AuthUser, { page, limit }: Pagination) {
+export async function listMyBookings(
+  user: AuthUser,
+  { page, limit }: Pagination,
+): Promise<BookingListResponse> {
   const where = eq(bookings.userId, user.id);
 
   const [rows, total] = await Promise.all([

@@ -7,11 +7,6 @@ export async function assertDatabaseReady() {
   try {
     await db.execute(sql`select 1`);
   } catch (error) {
-    throw new AppError(503, {
-      slug: 'not-ready',
-      title: 'Service not ready',
-      detail: 'The database is not reachable.',
-      cause: error,
-    });
+    throw new AppError('not-ready', { detail: 'The database is not reachable.', cause: error });
   }
 }
