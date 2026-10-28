@@ -7,6 +7,7 @@ import {
   pagination,
   updateEventBody,
 } from '../schemas/events.js';
+import * as bookings from '../services/bookings.js';
 import * as events from '../services/events.js';
 
 export const eventsRouter = Router();
@@ -43,4 +44,9 @@ eventsRouter.post('/:id/cancel', authenticate, async (req, res) => {
 eventsRouter.get('/:id/bookings', authenticate, async (req, res) => {
   const { id } = eventParams.parse(req.params);
   res.json(await events.listAttendees(id, currentUser(req), pagination.parse(req.query)));
+});
+
+eventsRouter.post('/:id/bookings', authenticate, async (req, res) => {
+  const { id } = eventParams.parse(req.params);
+  res.status(201).json(await bookings.bookSeat(id, currentUser(req)));
 });
