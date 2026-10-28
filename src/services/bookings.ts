@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, lt, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { bookings, events, type Booking, type Event } from '../db/schema.js';
@@ -45,26 +45,68 @@ const alreadyBooked = () =>
   });
 
 /**
- * NAIVE ON PURPOSE (Phase 8, step A): read the event, check for a free seat in TypeScript,
- * insert the booking, then write back the count read earlier plus one. Requests that arrive
- * together all read the same count before any of them writes, so they all get a seat.
+ * Books one seat, safely under any number of simultaneous requests.
+ *
+ * The seat is taken by one conditional UPDATE: "add 1 to seats_booked, but only if a seat is
+ * free and the event is published and upcoming". The UPDATE locks the event row, so a second
+ * request for the same event waits for the first to commit, then re-checks the WHERE clause
+ * against the new count. No request can act on a stale count, so no event is ever oversold.
+ *
+ * The booking row is inserted in the same transaction. If the user already holds a seat, the
+ * partial unique index refuses the insert, and the rollback also undoes the seat it took.
  */
 export async function bookSeat(eventId: string, user: AuthUser) {
-  const [event] = await db.select().from(events).where(eq(events.id, eventId));
-  if (!event || event.status === 'draft') throw eventNotFound();
-  if (event.status === 'cancelled') throw notBookable('The event is cancelled.');
-  if (event.startsAt <= new Date()) throw notBookable('The event has already started.');
-  if (event.seatsBooked >= event.capacity) throw soldOut(event.capacity);
-
+  let booked;
   try {
-    const [booking] = await db.insert(bookings).values({ eventId, userId: user.id }).returning();
-    await db
-      .update(events)
-      .set({ seatsBooked: event.seatsBooked + 1 })
-      .where(eq(events.id, eventId));
-    return toBookingResponse(booking!, event);
+    booked = await db.transaction(async (tx) => {
+      const [event] = await tx
+        .update(events)
+        .set({ seatsBooked: sql`${events.seatsBooked} + 1` })
+        .where(
+          and(
+            eq(events.id, eventId),
+            eq(events.status, 'published'),
+            gt(events.startsAt, sql`now()`),
+            lt(events.seatsBooked, events.capacity),
+          ),
+        )
+        .returning();
+      // No seat taken, nothing written: end the transaction and explain outside it.
+      if (!event) return undefined;
+
+      const [booking] = await tx.insert(bookings).values({ eventId, userId: user.id }).returning();
+      return toBookingResponse(booking!, event);
+    });
   } catch (error) {
     if (isUniqueViolation(error, 'bookings_one_confirmed_per_user_idx')) throw alreadyBooked();
     throw error;
   }
+
+  // Explaining needs a query of its own. Run inside the transaction on a second connection,
+  // it would deadlock the pool under load: every connection held by a transaction that waits
+  // for a free connection. Run here, after the transaction has released its connection.
+  if (!booked) throw await whyNotBookable(eventId, user);
+  return booked;
+}
+
+/**
+ * Runs only after the conditional UPDATE matched nothing, to tell the caller why.
+ * It decides nothing: the UPDATE already refused the seat.
+ */
+async function whyNotBookable(eventId: string, user: AuthUser) {
+  const [event] = await db.select().from(events).where(eq(events.id, eventId));
+  if (!event || event.status === 'draft') return eventNotFound();
+  if (event.status === 'cancelled') return notBookable('The event is cancelled.');
+  if (event.startsAt <= new Date()) return notBookable('The event has already started.');
+
+  // A full event the user is already booked on: "already booked" says more than "sold out".
+  const held = await db.$count(
+    bookings,
+    and(
+      eq(bookings.eventId, eventId),
+      eq(bookings.userId, user.id),
+      eq(bookings.status, 'confirmed'),
+    ),
+  );
+  return held > 0 ? alreadyBooked() : soldOut(event.capacity);
 }
