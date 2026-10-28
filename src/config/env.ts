@@ -35,6 +35,12 @@ const envSchema = z.object({
     )
     // Browsers send an Origin without a path or trailing slash, so compare like with like.
     .transform((urls) => urls.map((url) => new URL(url).origin)),
+  // Read by src/db/setup.ts only: whether to add the demo accounts after migrating. Off unless
+  // set, because their password is public.
+  SEED_DEMO_DATA: z
+    .enum(['true', 'false'], { error: 'must be true or false' })
+    .default('false')
+    .transform((value) => value === 'true'),
   // Off unless set: only trust X-Forwarded-For when a known proxy sits in front of the app.
   // Use a hop count ("1") or Express's names ("loopback", a subnet). See docs/deployment.md.
   TRUST_PROXY: z

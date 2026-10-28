@@ -12,6 +12,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export const requestLogger = pinoHttp<Request, Response>({
   logger,
+  // Docker's HEALTHCHECK calls /health every 10 seconds; a line for each would bury the rest.
+  // A failing check shows up in `docker compose ps` instead.
+  autoLogging: { ignore: (req) => req.url === '/health' },
   genReqId(req, res) {
     const incoming = req.headers['x-request-id'];
     const id =

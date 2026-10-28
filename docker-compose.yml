@@ -1,5 +1,24 @@
 name: kursi
 
+# The whole app in containers: `docker compose up --build` starts the database, prepares it,
+# then serves the API with its docs on http://localhost:3000/docs.
+# For development, start the database alone with `docker compose up -d db` and run
+# `npm run dev` on your machine instead.
+
+# What the migrate and api services share: the same image and the same settings.
+x-app: &app
+  build: .
+  image: kursi
+  env_file: .env
+  environment:
+    # Inside Compose the database is the db service, not localhost, and the image runs in
+    # production mode whatever .env says for local development.
+    DATABASE_URL: postgres://kursi:kursi@db:5432/kursi
+    NODE_ENV: production
+    # The demo adds the demo accounts unless .env says SEED_DEMO_DATA=false. The image on its
+    # own never does: its default is false, because their password is public.
+    SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+
 services:
   db:
     image: postgres:18-alpine
@@ -19,6 +38,26 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  # Runs once and exits: applies the migrations, then adds the demo data. Running it again
+  # changes nothing.
+  migrate:
+    <<: *app
+    command: ['node', 'dist/db/setup.js']
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    ports:
+      - '127.0.0.1:${PORT:-3000}:${PORT:-3000}'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # More than the 10 seconds the API gives requests in progress, so Docker never kills it
+    # halfway through its own shutdown.
+    stop_grace_period: 15s
 
 volumes:
   pgdata:

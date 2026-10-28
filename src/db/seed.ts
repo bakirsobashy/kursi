@@ -128,15 +128,20 @@ export async function seed() {
   });
 }
 
+/** Seeds, and logs what it added: "(all were already there)" when it added nothing. */
+export async function seedAndReport() {
+  const added = await seed();
+  const total = added.users + added.events + added.bookings;
+  logger.info(
+    `Seed added ${added.users} users, ${added.events} events and ${added.bookings} bookings` +
+      (total === 0 ? ' (all were already there)' : ''),
+  );
+}
+
 // Runs only as a script (npm run db:seed), so tests can import seed() without side effects.
 if (import.meta.main) {
   try {
-    const added = await seed();
-    const total = added.users + added.events + added.bookings;
-    logger.info(
-      `Seed added ${added.users} users, ${added.events} events and ${added.bookings} bookings` +
-        (total === 0 ? ' (all were already there)' : ''),
-    );
+    await seedAndReport();
   } catch (error) {
     logger.fatal({ err: error }, 'Seeding failed');
     process.exitCode = 1;
