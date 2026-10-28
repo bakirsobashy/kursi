@@ -175,7 +175,16 @@ jobs:
       - uses: actions/checkout@v7
       - name: Lint the Dockerfile
         if: matrix.arch == 'amd64'
-        run: docker run --rm -i hadolint/hadolint:v2.15.1 < Dockerfile
+        run: |
+          # Each finding becomes an annotation on the Dockerfile, shown in the pull request.
+          status=0
+          docker run --rm -i hadolint/hadolint:v2.15.1 /bin/hadolint --format json - \
+            < Dockerfile > hadolint.json || status=$?
+          if [ -s hadolint.json ]; then
+            jq -r '.[] | "::\(if .level == "error" then "error" else "warning" end) file=Dockerfile,line=\(.line),title=hadolint \(.code)::\(.message)"' hadolint.json
+          fi
+          if [ "$status" != 0 ]; then echo "::error title=hadolint::hadolint exited with code $status"; fi
+          exit "$status"
       # Third-party actions are pinned to a commit; Dependabot keeps the pins current.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the image, without pushing it
