@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/client.js';
-import { events, users, type Event, type User } from '../src/db/schema.js';
+import { bookings, events, users, type Event, type User } from '../src/db/schema.js';
 import { signAccessToken } from '../src/lib/tokens.js';
 
 const app = createApp();
@@ -77,6 +77,26 @@ export async function createEvent(
   if (!event) throw new Error('createEvent inserted nothing');
   return event;
 }
+
+/**
+ * Inserts a confirmed booking and counts its seat, straight in the database, so tests can
+ * set up attendees without going through the booking endpoint.
+ */
+export async function createBooking(event: Pick<Event, 'id'>, user: Pick<User, 'id'>) {
+  const [booking] = await db
+    .insert(bookings)
+    .values({ eventId: event.id, userId: user.id })
+    .returning();
+  await db
+    .update(events)
+    .set({ seatsBooked: sql`${events.seatsBooked} + 1` })
+    .where(eq(events.id, event.id));
+  if (!booking) throw new Error('createBooking inserted nothing');
+  return booking;
+}
+
+/** An ISO date-time `hours` from now, for request bodies. */
+export const hoursFromNow = (hours: number) => new Date(Date.now() + hours * HOUR_MS).toISOString();
 
 /** The Postgres error behind a failed Drizzle query, such as { code: '23514', constraint: '…' }. */
 export async function dbError(query: Promise<unknown>) {

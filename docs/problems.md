@@ -61,7 +61,7 @@ Fix the fields listed and send the request again.
 
 ## Not found
 
-**404.** The resource doesn't exist, or you aren't allowed to know it exists.
+**404.** The resource doesn't exist, or you aren't allowed to know it exists. For example, someone else's draft event answers 404 rather than 403, so its existence stays private.
 
 ## Route not found
 
@@ -70,6 +70,22 @@ Fix the fields listed and send the request again.
 ## Conflict
 
 **409.** The request clashes with the resource's current state. The `detail` field says how.
+
+## Event not draft
+
+**409.** `POST /api/v1/events/{id}/publish` was called on an event that isn't a draft. Only drafts can be published; a published event is already live, and a cancelled one can't come back.
+
+## Event started
+
+**409.** The draft's start time has already passed, so it can't be published. Move `startsAt` to the future with `PATCH /api/v1/events/{id}`, then publish.
+
+## Event cancelled
+
+**409.** The event is cancelled, so it can't be edited or cancelled again. Cancelling is final: the event stays visible as cancelled, and its bookings are cancelled with it.
+
+## Capacity below bookings
+
+**409.** `PATCH /api/v1/events/{id}` tried to set `capacity` below the number of seats already booked. The `detail` field says how many are booked. The database enforces this rule itself, so it holds even when a booking arrives during the update.
 
 ## Internal error
 

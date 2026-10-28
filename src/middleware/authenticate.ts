@@ -36,6 +36,16 @@ export const authenticate: RequestHandler = async (req, res, next) => {
   next();
 };
 
+/**
+ * For public routes that show more to some users, such as a draft to its organizer.
+ * No Authorization header: the request goes on anonymously. A header with a bad token is
+ * still a 401, so a client with an expired token learns it instead of silently seeing less.
+ */
+export const authenticateIfPresent: RequestHandler = async (req, res, next) => {
+  if (req.get('authorization') === undefined) return next();
+  return authenticate(req, res, next);
+};
+
 /** The authenticated user. Use it in handlers behind `authenticate`. */
 export function currentUser(req: Request): AuthUser {
   if (!req.user) throw new UnauthorizedError();
