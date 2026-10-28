@@ -30,7 +30,9 @@ COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY migrations ./migrations
 COPY public ./public
-USER node
+# The image's `node` user, by number: Kubernetes' runAsNonRoot can only check a numeric user
+# isn't root, and refuses to start the container otherwise.
+USER 1000:1000
 EXPOSE 3000
 # Slim images have no curl, so the check is one line of Node.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

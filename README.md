@@ -1,5 +1,7 @@
 # Kursi
 
+[![CI](https://github.com/bakirsobashy/kursi/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bakirsobashy/kursi/actions/workflows/ci.yml)
+
 A REST API for booking seats at events, built with Node.js, TypeScript, Express 5 and PostgreSQL. Work in progress.
 
 ## Run it

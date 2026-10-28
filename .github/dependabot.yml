@@ -1,0 +1,42 @@
+# Weekly update pull requests. Each one runs the full CI before anyone can merge it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Baghdad
+    # Minor and patch updates arrive as one pull request for the app's dependencies and one for
+    # the dev tools. Major updates get a pull request each, since they can break things.
+    groups:
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 only; see the pin in package.json.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      # Node's types follow the Node version in .nvmrc and the Dockerfile, not npm's latest.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: build(deps)
+      prefix-development: build(deps-dev)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Baghdad
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
