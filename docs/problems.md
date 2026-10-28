@@ -41,7 +41,11 @@ Fix the fields listed and send the request again.
 
 ## Invalid token
 
-**401.** The access token was sent but can't be used: it has expired, its signature doesn't match, or its account no longer exists. The `detail` field and the `WWW-Authenticate` header say which. After an expiry, get a new token and retry.
+**401.** The access token was sent but can't be used: it has expired, its signature doesn't match, or its account no longer exists. The `detail` field and the `WWW-Authenticate` header say which. After an expiry, call `POST /api/v1/auth/refresh` for a new token and retry.
+
+## Invalid refresh token
+
+**401.** `POST /api/v1/auth/refresh` couldn't continue the session. The cookie may be missing, unknown or expired (sessions end after 7 days without a refresh). Or it may have been used before: each refresh token works once, and a second use ends the whole session in case the token was stolen. The response also deletes the cookie. Log in again.
 
 ## Invalid credentials
 

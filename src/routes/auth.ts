@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from '../lib/refresh-cookie.js';
 import { loginBody, registerBody } from '../schemas/auth.js';
 import * as auth from '../services/auth.js';
 
@@ -10,5 +11,25 @@ authRouter.post('/register', async (req, res) => {
 });
 
 authRouter.post('/login', async (req, res) => {
-  res.json(await auth.login(loginBody.parse(req.body)));
+  const { body, refreshToken } = await auth.login(loginBody.parse(req.body));
+  setRefreshCookie(res, refreshToken);
+  res.json(body);
+});
+
+authRouter.post('/refresh', async (req, res) => {
+  try {
+    const { body, refreshToken } = await auth.refresh(readRefreshCookie(req), req.log);
+    setRefreshCookie(res, refreshToken);
+    res.json(body);
+  } catch (error) {
+    // A cookie that failed once will fail every time; tell the browser to drop it.
+    clearRefreshCookie(res);
+    throw error;
+  }
+});
+
+authRouter.post('/logout', async (req, res) => {
+  await auth.logout(readRefreshCookie(req));
+  clearRefreshCookie(res);
+  res.status(204).end();
 });
