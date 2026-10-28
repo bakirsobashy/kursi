@@ -1,4 +1,4 @@
-import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
+import { AppError } from '../lib/errors.js';
 
 /** The fields of a Postgres error that the app acts on. */
 interface PgError {
@@ -46,12 +46,12 @@ export function databaseProblem(error: unknown): AppError | undefined {
   const pgError = pgErrorOf(error);
   switch (pgError?.code) {
     case '23505': // unique_violation
-      return new ConflictError({
+      return new AppError('conflict', {
         detail: 'This would duplicate a value that must be unique.',
         cause: error,
       });
     case '23514': // check_violation
-      return new ConflictError({
+      return new AppError('conflict', {
         detail: 'This would break a rule the stored data must follow.',
         cause: error,
       });
@@ -59,23 +59,22 @@ export function databaseProblem(error: unknown): AppError | undefined {
       // On a delete, other rows still point at this one; on an insert or update, the row it
       // points at doesn't exist.
       return pgError.detail?.includes('is still referenced')
-        ? new ConflictError({ detail: 'Other records still depend on this one.', cause: error })
-        : new NotFoundError({
+        ? new AppError('conflict', {
+            detail: 'Other records still depend on this one.',
+            cause: error,
+          })
+        : new AppError('not-found', {
             detail: 'Something this request refers to does not exist.',
             cause: error,
           });
     case '57014': // query_canceled: statement_timeout ran out
-      return new AppError(503, {
-        slug: 'database-timeout',
-        title: 'The database took too long',
+      return new AppError('database-timeout', {
         detail: 'The request was stopped after 5 seconds. Try again in a moment.',
         cause: error,
       });
     case '40P01': // deadlock_detected
     case '40001': // serialization_failure
-      return new AppError(503, {
-        slug: 'database-busy',
-        title: 'The database was busy',
+      return new AppError('database-busy', {
         detail: 'The request clashed with another one at the same moment. Try again.',
         cause: error,
       });

@@ -12,6 +12,7 @@ import {
 } from './middleware/rate-limits.js';
 import { requestLogger } from './middleware/request-logger.js';
 import { apiRouter } from './routes/api.js';
+import { docsRouter } from './routes/docs.js';
 import { healthRouter } from './routes/health.js';
 
 export interface AppOptions {
@@ -70,7 +71,9 @@ export function createApp({ rateLimits = defaultRateLimits() }: AppOptions = {})
   // Unsigned cookies: the refresh token is unguessable on its own, so signing adds nothing.
   app.use(cookieParser());
 
+  // Outside /api/v1, so neither the health checks nor the docs count toward any rate limit.
   app.use(healthRouter);
+  app.use(docsRouter);
   app.use('/api/v1', apiRouter);
 
   app.use(notFound);

@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 import { logger } from '../lib/logger.js';
 import { closeDb, db } from './client.js';
+import { DEMO_EMAILS, DEMO_IDS, DEMO_PASSWORD } from './demo.js';
 import { bookings, events, users } from './schema.js';
 
 /*
@@ -9,22 +10,7 @@ import { bookings, events, users } from './schema.js';
  * so running the seed twice changes nothing.
  */
 
-export const DEMO_PASSWORD = 'demo-password';
-
-const ids = {
-  admin: '0199a3c2-0000-7000-8000-000000000001',
-  alice: '0199a3c2-0000-7000-8000-000000000002',
-  bob: '0199a3c2-0000-7000-8000-000000000003',
-  meetup: '0199a3c2-0000-7000-8000-000000000101',
-  workshop: '0199a3c2-0000-7000-8000-000000000102',
-  postgres: '0199a3c2-0000-7000-8000-000000000103',
-  docker: '0199a3c2-0000-7000-8000-000000000104',
-  gameNight: '0199a3c2-0000-7000-8000-000000000105',
-  bobAtWorkshop: '0199a3c2-0000-7000-8000-000000000201',
-  adminAtWorkshop: '0199a3c2-0000-7000-8000-000000000202',
-  aliceAtPostgres: '0199a3c2-0000-7000-8000-000000000203',
-  bobAtGameNight: '0199a3c2-0000-7000-8000-000000000204',
-} as const;
+const ids = DEMO_IDS;
 
 /** A time `days` from now, on the hour, in UTC. Relative dates keep the demo events upcoming. */
 function daysFromNow(days: number, hourUtc: number) {
@@ -44,13 +30,13 @@ export async function seed() {
       .values([
         {
           id: ids.admin,
-          email: 'admin@kursi.test',
+          email: DEMO_EMAILS.admin,
           name: 'Kursi Admin',
           role: 'admin',
           passwordHash,
         },
-        { id: ids.alice, email: 'alice@kursi.test', name: 'Alice Organizer', passwordHash },
-        { id: ids.bob, email: 'bob@kursi.test', name: 'Bob Organizer', passwordHash },
+        { id: ids.alice, email: DEMO_EMAILS.alice, name: 'Alice Organizer', passwordHash },
+        { id: ids.bob, email: DEMO_EMAILS.bob, name: 'Bob Organizer', passwordHash },
       ])
       .onConflictDoNothing()
       .returning({ id: users.id });
