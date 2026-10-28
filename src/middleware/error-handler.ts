@@ -1,6 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import type { ErrorRequestHandler, Request } from 'express';
 import { ZodError } from 'zod';
+import { databaseProblem } from '../db/errors.js';
 import { AppError, problemType } from '../lib/errors.js';
 
 /** The RFC 9457 Problem Details body every error response uses. */
@@ -105,11 +106,20 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   // Too late to send an error body; Express's default handler closes the connection.
   if (res.headersSent) return next(error);
 
-  const problem = toProblem(error, req);
+  // A database rule that no service translated still gets a meaningful answer.
+  const fromDatabase = error instanceof AppError ? undefined : databaseProblem(error);
+  if (fromDatabase && fromDatabase.status < 500) {
+    // Worth a look: the database caught something the code didn't expect.
+    req.log.warn({ err: error }, 'A database rule refused the request');
+  }
+  const handled: unknown = fromDatabase ?? error;
+  const problem = toProblem(handled, req);
 
   // Unexpected errors go into the request's log line in full, with their stack;
   // the caller only sees the generic body above.
-  if (problem.status >= 500) res.err = error instanceof Error ? error : new Error(String(error));
+  if (problem.status >= 500) {
+    res.err = handled instanceof Error ? handled : new Error(String(handled));
+  }
 
   // HTTP requires every 401 to say how to authenticate. `authenticate` sets a more specific one.
   if (problem.status === 401 && !res.hasHeader('WWW-Authenticate')) {

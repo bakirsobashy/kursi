@@ -26,7 +26,29 @@ describe('parseEnv', () => {
       ACCESS_TOKEN_TTL_SECONDS: 900,
       REFRESH_TOKEN_TTL_SECONDS: 604_800,
       CORS_ORIGINS: [],
+      TRUST_PROXY: false,
     });
+  });
+
+  it.each([
+    [undefined, false],
+    ['false', false],
+    ['true', true],
+    ['1', 1],
+    ['2', 2],
+    ['loopback', 'loopback'],
+    ['10.0.0.0/8', '10.0.0.0/8'],
+  ])('reads TRUST_PROXY=%s as %s', (value, expected) => {
+    expect(parseEnv({ ...valid, TRUST_PROXY: value }).TRUST_PROXY).toBe(expected);
+  });
+
+  it('reduces each CORS origin to scheme, host and port, as browsers send it', () => {
+    const env = parseEnv({
+      ...valid,
+      CORS_ORIGINS: 'https://kursi.app/,http://localhost:5173/app',
+    });
+
+    expect(env.CORS_ORIGINS).toEqual(['https://kursi.app', 'http://localhost:5173']);
   });
 
   it('lists every missing required variable at once', () => {

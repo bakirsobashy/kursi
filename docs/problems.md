@@ -106,6 +106,10 @@ Fix the fields listed and send the request again.
 
 **409.** `POST /api/v1/bookings/{id}/cancel` was called on a booking that's already cancelled, either by you or because its event was cancelled. Its seat is already free.
 
+## Too many requests
+
+**429.** Your IP address sent too many requests in the last minute. The `Retry-After` header says how many seconds to wait, and the `RateLimit` header shows the remaining budget. The limits are per minute: 5 failed logins (a correct password never counts), 5 registrations, 30 refreshes, and 300 requests in all under `/api/v1`.
+
 ## Internal error
 
 **500.** Something failed on the server. The response carries no internal details; the full error is logged under the same `requestId`.
@@ -113,3 +117,11 @@ Fix the fields listed and send the request again.
 ## Not ready
 
 **503.** Returned by `GET /ready` when the API can't reach its database. The process is running, but it can't serve requests yet. Load balancers and orchestrators should hold traffic back and check again.
+
+## Database timeout
+
+**503.** The database didn't finish the request within 5 seconds, so it was stopped. Nothing was saved. Try again in a moment.
+
+## Database busy
+
+**503.** The request clashed with another one at the same moment, and the database stopped one of them to let the other finish. Nothing was saved. Retrying is safe.
