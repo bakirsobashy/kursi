@@ -26,8 +26,17 @@ describe('parseEnv', () => {
       ACCESS_TOKEN_TTL_SECONDS: 900,
       REFRESH_TOKEN_TTL_SECONDS: 604_800,
       CORS_ORIGINS: [],
+      SEED_DEMO_DATA: false,
       TRUST_PROXY: false,
     });
+  });
+
+  it('seeds the demo data only for SEED_DEMO_DATA=true, and refuses anything but true or false', () => {
+    expect(parseEnv({ ...valid, SEED_DEMO_DATA: 'true' }).SEED_DEMO_DATA).toBe(true);
+    expect(parseEnv({ ...valid, SEED_DEMO_DATA: 'false' }).SEED_DEMO_DATA).toBe(false);
+    expect(problemsFor({ ...valid, SEED_DEMO_DATA: 'yes' })).toEqual([
+      'SEED_DEMO_DATA: must be true or false',
+    ]);
   });
 
   it.each([

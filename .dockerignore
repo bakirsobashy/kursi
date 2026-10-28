@@ -1,0 +1,10 @@
+# Leave everything out of the build context, then let in only what the image is built from.
+# Secrets (.env), git history, node_modules, dist, tests and coverage never reach Docker.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!src/
+!migrations/
+!public/
