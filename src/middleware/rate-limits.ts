@@ -12,7 +12,7 @@ export interface RateLimits {
   api: number;
 }
 
-export const PRODUCTION_RATE_LIMITS: RateLimits = { login: 5, register: 5, refresh: 30, api: 300 };
+export const PRODUCTION_RATE_LIMITS: RateLimits = { login: 50, register: 5, refresh: 30, api: 300 };
 
 // High enough that the test suite never trips them; one test checks the real limits.
 const TEST_RATE_LIMITS: RateLimits = {
