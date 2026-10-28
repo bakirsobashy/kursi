@@ -1,7 +1,5 @@
-import { sql } from 'drizzle-orm';
 import { Router } from 'express';
-import { db } from '../db/client.js';
-import { AppError } from '../lib/errors.js';
+import { assertDatabaseReady } from '../services/health.js';
 
 export const healthRouter = Router();
 
@@ -12,15 +10,6 @@ healthRouter.get('/health', (_req, res) => {
 
 /** Readiness: the app can do real work, which here means the database answers a query. */
 healthRouter.get('/ready', async (_req, res) => {
-  try {
-    await db.execute(sql`select 1`);
-  } catch (error) {
-    throw new AppError(503, {
-      slug: 'not-ready',
-      title: 'Service not ready',
-      detail: 'The database is not reachable.',
-      cause: error,
-    });
-  }
+  await assertDatabaseReady();
   res.json({ status: 'ready' });
 });
