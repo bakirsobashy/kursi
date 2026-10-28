@@ -52,3 +52,47 @@ describe('booking under load', () => {
     },
   );
 });
+
+describe('bookings and cancellations racing each other', () => {
+  it(
+    'keeps the seat counter equal to the confirmed bookings, with no deadlocks',
+    { repeats: 4, timeout: 20_000 },
+    async () => {
+      await resetDb();
+      const event = await createEvent({ capacity: CAPACITY });
+      const holders = await Promise.all(Array.from({ length: CAPACITY }, () => createUser()));
+      const held = [];
+      for (const holder of holders) {
+        const res = await api()
+          .post(`/api/v1/events/${event.id}/bookings`)
+          .set('Authorization', bearer(await loginAs(holder)));
+        held.push({ holder, bookingId: res.body.id as string });
+      }
+      const newcomers = await Promise.all(Array.from({ length: 20 }, () => createUser()));
+
+      // Everyone who holds a seat cancels while 20 newcomers try to book, all at once.
+      const responses = await Promise.all([
+        ...held.map(async ({ holder, bookingId }) =>
+          api()
+            .post(`/api/v1/bookings/${bookingId}/cancel`)
+            .set('Authorization', bearer(await loginAs(holder))),
+        ),
+        ...newcomers.map(async (newcomer) =>
+          api()
+            .post(`/api/v1/events/${event.id}/bookings`)
+            .set('Authorization', bearer(await loginAs(newcomer))),
+        ),
+      ]);
+
+      const [row] = await db.select().from(events).where(eq(events.id, event.id));
+      const confirmed = await db.$count(
+        bookings,
+        and(eq(bookings.eventId, event.id), eq(bookings.status, 'confirmed')),
+      );
+      expect(responses.filter((res) => res.status >= 500)).toHaveLength(0);
+      expect(responses.slice(0, CAPACITY).every((res) => res.status === 200)).toBe(true);
+      expect(row?.seatsBooked).toBe(confirmed);
+      expect(confirmed).toBeLessThanOrEqual(CAPACITY);
+    },
+  );
+});

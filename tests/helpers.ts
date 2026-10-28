@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import argon2 from 'argon2';
 import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { db } from '../src/db/client.js';
+import { db, pool } from '../src/db/client.js';
 import { bookings, events, users, type Event, type User } from '../src/db/schema.js';
 import { signAccessToken } from '../src/lib/tokens.js';
 
@@ -107,4 +108,40 @@ export async function dbError(query: Promise<unknown>) {
     return cause as { code?: string; constraint?: string };
   }
   throw new Error('Expected the query to fail, but it succeeded');
+}
+
+/**
+ * Waits until at least `count` queries in the test database are blocked on a lock.
+ * Tests use it to force a race: hold a lock in one transaction, send requests, wait here
+ * until Postgres shows them waiting, then let go.
+ */
+export async function waitUntilQueriesAreBlocked(count: number) {
+  for (let attempt = 0; attempt < 150; attempt++) {
+    const { rows } = await pool.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+       WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    if (rows[0]!.waiting >= count) return;
+    await sleep(20);
+  }
+  throw new Error(`Fewer than ${count} queries ever waited on a lock`);
+}
+
+/**
+ * Locks a row from a separate connection, as another request in the middle of a transaction
+ * would. Call `release()` to commit and let the waiting requests through.
+ */
+export async function holdRowLock(table: 'events' | 'bookings', id: string) {
+  const client = await pool.connect();
+  await client.query('BEGIN');
+  await client.query(`SELECT 1 FROM ${table} WHERE id = $1 FOR UPDATE`, [id]);
+  let released = false;
+  return {
+    async release() {
+      if (released) return;
+      released = true;
+      await client.query('COMMIT');
+      client.release();
+    },
+  };
 }

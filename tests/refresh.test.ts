@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { eq } from 'drizzle-orm';
 import { decodeJwt } from 'jose';
 import type { Response } from 'supertest';
@@ -7,7 +6,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db, pool } from '../src/db/client.js';
 import { refreshTokens, users, type User } from '../src/db/schema.js';
 import { refreshCookieOptions } from '../src/lib/refresh-cookie.js';
-import { api, bearer, createUser, resetDb, TEST_PASSWORD } from './helpers.js';
+import {
+  api,
+  bearer,
+  createUser,
+  resetDb,
+  TEST_PASSWORD,
+  waitUntilQueriesAreBlocked,
+} from './helpers.js';
 
 /** The refresh_token Set-Cookie line of a response, if it has one. */
 const refreshSetCookie = (res: Response) =>
@@ -220,7 +226,7 @@ describe('POST /api/v1/auth/refresh', () => {
       ]);
 
       const pending = refreshWith(token).then((res) => res);
-      await waitUntilARequestIsBlocked();
+      await waitUntilQueriesAreBlocked(1);
       await other.query('COMMIT');
 
       // With the row lock, this request waited and then read the committed, revoked row.
@@ -242,19 +248,6 @@ describe('POST /api/v1/auth/refresh', () => {
     expect((await refreshWith(refreshTokenFrom(winner))).status).toBe(401);
   });
 });
-
-/** Waits until some query in the test database is waiting on a row lock. */
-async function waitUntilARequestIsBlocked() {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const { rows } = await pool.query<{ waiting: number }>(
-      `SELECT count(*)::int AS waiting FROM pg_stat_activity
-       WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-    );
-    if (rows[0]!.waiting > 0) return;
-    await sleep(20);
-  }
-  throw new Error('No query ever waited on the lock');
-}
 
 describe('POST /api/v1/auth/logout', () => {
   it('ends the session and deletes the cookie', async () => {

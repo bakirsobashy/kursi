@@ -1,9 +1,10 @@
-import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { bookings, events, type Booking, type Event } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AuthUser } from '../lib/tokens.js';
+import type { Pagination } from '../schemas/events.js';
 
 type EventSummary = Pick<Event, 'id' | 'title' | 'venue' | 'startsAt' | 'endsAt' | 'status'>;
 
@@ -109,4 +110,92 @@ async function whyNotBookable(eventId: string, user: AuthUser) {
     ),
   );
   return held > 0 ? alreadyBooked() : soldOut(event.capacity);
+}
+
+const bookingNotFound = () => new NotFoundError({ detail: 'You have no booking with this ID.' });
+
+/**
+ * Cancels the caller's booking and frees its seat, in one transaction, before the event starts.
+ * Someone else's booking answers 404, the same as one that doesn't exist.
+ *
+ * The event row is locked first (SELECT … FOR UPDATE), the same order bookSeat and
+ * cancelEvent take their locks in: event, then booking. Two transactions that lock the same
+ * rows in different orders can each wait for the other forever; one order rules that out.
+ */
+export async function cancelBooking(bookingId: string, user: AuthUser) {
+  return db.transaction(async (tx) => {
+    const [found] = await tx
+      .select({ eventId: bookings.eventId, userId: bookings.userId, status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId));
+    if (!found || found.userId !== user.id) throw bookingNotFound();
+
+    const alreadyCancelled = () =>
+      new ConflictError({
+        slug: 'booking-cancelled',
+        title: 'Booking is already cancelled',
+        detail: 'This booking was cancelled earlier, so its seat is already free.',
+      });
+    if (found.status === 'cancelled') throw alreadyCancelled();
+
+    const [event] = await tx
+      .select()
+      .from(events)
+      .where(eq(events.id, found.eventId))
+      .for('update');
+    if (event!.startsAt <= new Date()) {
+      throw new ConflictError({
+        slug: 'event-started',
+        title: 'Event has already started',
+        detail: "A booking can't be cancelled once its event has started.",
+      });
+    }
+
+    // Conditional, so a second cancel racing this one can't free the same seat twice.
+    const [cancelled] = await tx
+      .update(bookings)
+      .set({ status: 'cancelled', cancelledAt: new Date() })
+      .where(and(eq(bookings.id, bookingId), eq(bookings.status, 'confirmed')))
+      .returning();
+    if (!cancelled) throw alreadyCancelled();
+
+    const [updated] = await tx
+      .update(events)
+      .set({ seatsBooked: sql`${events.seatsBooked} - 1` })
+      .where(eq(events.id, found.eventId))
+      .returning();
+    return toBookingResponse(cancelled, updated!);
+  });
+}
+
+/** The caller's bookings, confirmed and cancelled, newest first, each with its event. */
+export async function listMyBookings(user: AuthUser, { page, limit }: Pagination) {
+  const where = eq(bookings.userId, user.id);
+
+  const [rows, total] = await Promise.all([
+    db
+      .select({
+        booking: bookings,
+        event: {
+          id: events.id,
+          title: events.title,
+          venue: events.venue,
+          startsAt: events.startsAt,
+          endsAt: events.endsAt,
+          status: events.status,
+        },
+      })
+      .from(bookings)
+      .innerJoin(events, eq(events.id, bookings.eventId))
+      .where(where)
+      .orderBy(desc(bookings.createdAt), desc(bookings.id))
+      .limit(limit)
+      .offset((page - 1) * limit),
+    db.$count(bookings, where),
+  ]);
+
+  return {
+    data: rows.map((row) => toBookingResponse(row.booking, row.event)),
+    meta: { page, limit, total },
+  };
 }

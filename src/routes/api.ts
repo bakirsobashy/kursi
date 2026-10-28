@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authRouter } from './auth.js';
+import { bookingsRouter } from './bookings.js';
 import { eventsRouter } from './events.js';
 import { usersRouter } from './users.js';
 
@@ -9,3 +10,4 @@ export const apiRouter = Router();
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/events', eventsRouter);
+apiRouter.use('/bookings', bookingsRouter);

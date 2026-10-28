@@ -77,7 +77,10 @@ Fix the fields listed and send the request again.
 
 ## Event started
 
-**409.** The draft's start time has already passed, so it can't be published. Move `startsAt` to the future with `PATCH /api/v1/events/{id}`, then publish.
+**409.** The event has already started, so the action is no longer possible:
+
+- A draft can't be published. Move `startsAt` to the future with `PATCH /api/v1/events/{id}`, then publish.
+- A booking can't be cancelled.
 
 ## Event cancelled
 
@@ -98,6 +101,10 @@ Fix the fields listed and send the request again.
 ## Event not bookable
 
 **409.** The event exists but isn't taking bookings, because it's cancelled or has already started. The `detail` field says which. Drafts aren't bookable either, but they answer 404 because they aren't public.
+
+## Booking cancelled
+
+**409.** `POST /api/v1/bookings/{id}/cancel` was called on a booking that's already cancelled, either by you or because its event was cancelled. Its seat is already free.
 
 ## Internal error
 
