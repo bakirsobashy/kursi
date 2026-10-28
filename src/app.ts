@@ -1,3 +1,4 @@
+import cookieParser from 'cookie-parser';
 import express from 'express';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
@@ -15,6 +16,8 @@ export function createApp() {
 
   app.use(requestLogger);
   app.use(express.json({ limit: '100kb' }));
+  // Unsigned cookies: the refresh token is unguessable on its own, so signing adds nothing.
+  app.use(cookieParser());
 
   app.use(healthRouter);
   app.use('/api/v1', apiRouter);
