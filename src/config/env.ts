@@ -32,7 +32,20 @@ const envSchema = z.object({
       z.array(
         z.url({ protocol: /^https?$/, error: 'must be a comma-separated list of http(s) origins' }),
       ),
-    ),
+    )
+    // Browsers send an Origin without a path or trailing slash, so compare like with like.
+    .transform((urls) => urls.map((url) => new URL(url).origin)),
+  // Off unless set: only trust X-Forwarded-For when a known proxy sits in front of the app.
+  // Use a hop count ("1") or Express's names ("loopback", a subnet). See docs/deployment.md.
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value === '' || value === 'false') return false;
+      if (value === 'true') return true;
+      return /^\d+$/.test(value) ? Number(value) : value;
+    }),
 });
 
 export type Env = z.infer<typeof envSchema>;

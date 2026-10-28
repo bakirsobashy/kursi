@@ -5,6 +5,8 @@ import { afterAll, inject } from 'vitest';
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = inject('databaseUrl');
 process.env.JWT_ACCESS_SECRET = 'test-secret-that-is-at-least-32-characters-long';
+process.env.CORS_ORIGINS = 'http://localhost:5173';
+delete process.env.TRUST_PROXY;
 // Set TEST_LOG_LEVEL=debug to see the app's logs while a test runs.
 process.env.LOG_LEVEL = process.env.TEST_LOG_LEVEL ?? 'silent';
 

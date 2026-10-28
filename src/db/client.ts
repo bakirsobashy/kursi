@@ -10,6 +10,12 @@ export const pool = new pg.Pool({
   max: 10,
   // Fail fast when the database is down, rather than leaving requests hanging.
   connectionTimeoutMillis: 5_000,
+  // Postgres cancels any statement still running after 5 s, so one slow query can't hold a
+  // connection (and its row locks) forever. Waiting for a lock counts towards it.
+  statement_timeout: 5_000,
+  // And ends a session that sits inside an open transaction doing nothing for 10 s, which
+  // would otherwise keep its locks if a bug ever forgot to commit or roll back.
+  idle_in_transaction_session_timeout: 10_000,
 });
 
 // An idle connection can die, for example when the database restarts. Without this listener,
