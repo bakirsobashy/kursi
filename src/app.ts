@@ -2,6 +2,7 @@ import express from 'express';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
 import { requestLogger } from './middleware/request-logger.js';
+import { apiRouter } from './routes/api.js';
 import { healthRouter } from './routes/health.js';
 
 /**
@@ -16,6 +17,7 @@ export function createApp() {
   app.use(express.json({ limit: '100kb' }));
 
   app.use(healthRouter);
+  app.use('/api/v1', apiRouter);
 
   app.use(notFound);
   app.use(errorHandler);

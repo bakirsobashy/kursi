@@ -7,6 +7,9 @@ import { env } from '../config/env.js';
  */
 export const logger = pino({
   level: env.LOG_LEVEL,
+  // Access tokens arrive in the Authorization header from this phase on, so keep them out of
+  // the logs now. Phase 9 extends this list.
+  redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
   ...(env.NODE_ENV === 'development' && {
     transport: {
       target: 'pino-pretty',

@@ -5,6 +5,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/client.js';
 import { events, users, type Event, type User } from '../src/db/schema.js';
+import { signAccessToken } from '../src/lib/tokens.js';
 
 const app = createApp();
 
@@ -38,6 +39,16 @@ export async function createUser(
   if (!user) throw new Error('createUser inserted nothing');
   return user;
 }
+
+/**
+ * A valid access token for the user, signed the same way login signs one. It skips the login
+ * endpoint (and its Argon2 check), so tests that only need "a logged-in user" stay fast.
+ */
+export const loginAs = (user: Pick<User, 'id' | 'role'>) =>
+  signAccessToken({ id: user.id, role: user.role });
+
+/** The Authorization header value for a token: `.set('Authorization', bearer(token))`. */
+export const bearer = (token: string) => `Bearer ${token}`;
 
 const HOUR_MS = 3_600_000;
 

@@ -37,7 +37,19 @@ Fix the fields listed and send the request again.
 
 ## Unauthorized
 
-**401.** The request needs a valid access token in an `Authorization: Bearer <token>` header. The token may be missing, expired or invalid.
+**401.** The request has no access token. Log in with `POST /api/v1/auth/login` and send the token in an `Authorization: Bearer <token>` header.
+
+## Invalid token
+
+**401.** The access token was sent but can't be used: it has expired, its signature doesn't match, or its account no longer exists. The `detail` field and the `WWW-Authenticate` header say which. After an expiry, get a new token and retry.
+
+## Invalid credentials
+
+**401.** The email and password don't match an account. The response is the same whether the email is unknown or the password is wrong, so it can't be used to find out who has an account.
+
+## Email taken
+
+**409.** `POST /api/v1/auth/register` was called with an email that already has an account. Emails are compared without regard to case, so `Ali@example.com` and `ali@example.com` are the same account. Log in instead.
 
 ## Forbidden
 

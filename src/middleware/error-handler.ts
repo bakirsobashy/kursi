@@ -111,5 +111,10 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   // the caller only sees the generic body above.
   if (problem.status >= 500) res.err = error instanceof Error ? error : new Error(String(error));
 
+  // HTTP requires every 401 to say how to authenticate. `authenticate` sets a more specific one.
+  if (problem.status === 401 && !res.hasHeader('WWW-Authenticate')) {
+    res.setHeader('WWW-Authenticate', 'Bearer realm="kursi"');
+  }
+
   res.status(problem.status).type('application/problem+json').json(problem);
 };
